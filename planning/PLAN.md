@@ -454,3 +454,47 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 - Portfolio visualization: heatmap renders with correct colors, P&L chart has data points
 - AI chat (mocked): send a message, receive a response, trade execution appears inline
 - SSE resilience: disconnect and verify reconnection
+
+---
+
+## 13. Document Review — Questions, Clarifications & Simplification Opportunities
+
+### Current State vs. Plan
+
+The market data subsystem (Section 6) is **complete** — see `planning/MARKET_DATA_SUMMARY.md`. Everything else (frontend, database, API routes, portfolio logic, LLM integration, Docker, scripts, tests) is **not yet built**. The backend currently contains only `app/market/` and an empty `__init__.py`. No `frontend/`, `scripts/`, `test/`, `db/`, `Dockerfile`, or `docker-compose.yml` exist yet.
+
+### Questions & Clarifications
+
+1. **`backend/db/` vs `db/` ambiguity** — Section 4 says `backend/db/` holds "schema definitions, seed data, migration logic" while `db/` at the top level is the volume mount. But Section 7 says the backend does lazy init on startup. Where does the schema SQL actually live — as `.sql` files in `backend/db/`, or inline in Python code? Since lazy init is just Python creating tables, having a separate `backend/db/` directory for SQL files may be unnecessary. Consider keeping schema definitions in the Python code (e.g., `backend/app/db.py`) and only having the top-level `db/` for the runtime volume mount.
+
+2. **UUID primary keys on all tables** — The schema uses TEXT UUIDs as primary keys everywhere. For a single-user SQLite app, auto-incrementing INTEGER primary keys would be simpler, faster, and use less storage. UUIDs add complexity (generation, indexing, storage) with no benefit here. The `user_id` column already handles the future multi-user case. Consider using INTEGER PRIMARY KEY AUTOINCREMENT instead.
+
+3. **`user_id` on every table** — The plan acknowledges this is single-user with `"default"` hardcoded, yet adds `user_id` to every table "for future multi-user support." This is speculative design. If multi-user is never built, this is dead weight on every query. If it is built, a migration adding the column is trivial. Consider dropping `user_id` entirely and adding it only if/when multi-user becomes real.
+
+4. **Fractional shares** — The schema says `quantity REAL` with "fractional shares supported," but the UX section only mentions buying/selling shares with no mention of fractional quantities. Is fractional share support actually desired? If not, use INTEGER for quantity and avoid floating-point rounding issues in P&L math.
+
+5. **Portfolio snapshots every 30 seconds** — This creates ~2,880 rows per day for a single user. What's the retention policy? Should old snapshots be pruned, or does the P&L chart always show all-time history? If the chart only shows "since page load" or "last session," the snapshot background task may be unnecessary — the frontend could just track values from the SSE stream like it does for sparklines.
+
+6. **Chat history loading** — Section 9 says "loads recent conversation history" but doesn't define what "recent" means. How many messages? All of them? A token budget? This matters for LLM context window management. Specify a concrete limit (e.g., last 20 messages or last 4,000 tokens).
+
+7. **Trade execution and price staleness** — Trades fill "at current price" — but what if the price cache hasn't been updated recently (e.g., the Massive API poller runs every 15 seconds on the free tier)? Should there be a staleness check, or is any cached price acceptable? For the simulator this is a non-issue (~500ms updates), but for Massive with 15-second intervals, you could fill at a price that's 14 seconds old.
+
+8. **`GET /api/watchlist` returns "latest prices"** — This duplicates data already available from the SSE stream and the price cache. The frontend will already have live prices from SSE. Consider having the watchlist endpoint return only the ticker list, and let the frontend merge in prices from its SSE-fed local state.
+
+9. **Charting library choice** — The plan says "Lightweight Charts or Recharts" but these are very different. Lightweight Charts is a canvas-based financial charting library (candlesticks, time-series). Recharts is a general-purpose SVG React charting library. For sparklines and a simple price-over-time chart, Recharts is simpler. For a Bloomberg-like feel with professional financial charts, Lightweight Charts is better. Pick one and commit.
+
+10. **No `GET /api/trades` endpoint** — There's a `trades` table but no API endpoint to read trade history. The positions table in the frontend shows current holdings but not past trades. Is a trade history view intentional or was it omitted? If omitted, consider whether it's needed.
+
+### Simplification Opportunities
+
+1. **Drop `backend/db/` directory** — Keep schema inline in Python (a single `db.py` module). One less directory, one less indirection layer. The lazy-init pattern works naturally with Python-defined schema.
+
+2. **Drop UUID primary keys** — Use SQLite's `INTEGER PRIMARY KEY AUTOINCREMENT`. Simpler, faster, no UUID library needed.
+
+3. **Drop `user_id` from all tables** — Add it when multi-user is actually needed. Every query currently has a redundant `WHERE user_id = 'default'`.
+
+4. **Simplify the watchlist endpoint** — Return ticker list only. The frontend already has live prices from SSE.
+
+5. **Consider dropping portfolio snapshots** — If the P&L chart only needs to show data since page load, the frontend can accumulate it from the SSE stream + portfolio API polls, like it does for sparklines. This eliminates a background task and a table. If historical P&L across sessions is desired, keep the snapshots but define a retention policy.
+
+6. **Merge `users_profile` into application config** — With single-user, cash balance could be a single row in a `config` table or even just part of the portfolio response. A dedicated `users_profile` table with one row is over-structured for this use case.
