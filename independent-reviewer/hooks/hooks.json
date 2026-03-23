@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "codex exec \"review changes since last commit and list then in the file planning/CHANGES.txt\""
+          }
+        ]
+      }
+    ]
+  }
+}

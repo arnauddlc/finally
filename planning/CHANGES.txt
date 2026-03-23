@@ -1,0 +1,21 @@
+Changes since last commit
+=========================
+
+1. Removed `.claude/settings.json` plugin configuration that previously enabled the `frontend-design`, `context7`, and `playwright` Claude plugins.
+
+2. Deleted `README.md`, removing the project overview, architecture summary, quick-start instructions, environment variable documentation, and repository structure notes.
+
+3. Deleted `planning/MARKET_DATA_SUMMARY.md`, removing the market data backend implementation summary, architecture notes, and testing/status write-up.
+
+4. Deleted `planning/REVIEW.md`, removing the prior review notes for `planning/PLAN.md`.
+
+5. Added `.mcp.json`, introducing a GitHub MCP server configuration that points to `https://api.githubcopilot.com/mcp/` and expects a GitHub PAT in the `Authorization` header.
+
+6. Added `.claude/agents/codex-reviewer.md`, defining a Claude agent that delegates review of `planning/PLAN.md` to `codex` and writes output to `planning/REVIEW.md`.
+
+7. Added `.claude/agents/reviewer.md`, defining a second review agent intended to write review output into `planning/REVIEW.md`.
+
+8. Added `.claude-plugin/marketplace.json`, registering a local Claude plugin marketplace named `arnie-workshop` with a single `independent-reviewer` plugin.
+
+9. Added `independent-reviewer/hooks/hooks.json`, configuring a `Stop` hook that runs:
+   `codex exec "review changes since last commit and list then in the file planning/CHANGES.txt"`
